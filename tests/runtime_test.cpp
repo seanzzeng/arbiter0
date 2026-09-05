@@ -7,11 +7,11 @@ int main() {
     arbiter0::Runtime runtime;
     std::vector<int> events;
 
-    runtime.spawn([&] {
+    runtime.spawn([&](arbiter0::ThreadContext&) {
         events.push_back(10);
     });
 
-    runtime.spawn([&] {
+    runtime.spawn([&](arbiter0::ThreadContext&) {
         events.push_back(20);
     });
 

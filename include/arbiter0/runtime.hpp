@@ -10,9 +10,24 @@ namespace arbiter0 {
 
 using ThreadId = std::size_t;
 
+class Runtime;
+
+class ThreadContext {
+public:
+    void yield();
+
+private:
+    friend class Runtime;
+
+    ThreadContext(Runtime& runtime, ThreadId id): runtime_(runtime), id_(id) {}
+    
+    Runtime& runtime_;
+    ThreadId id_;
+};
+
 class Runtime {
 public:
-    ThreadId spawn(std::function<void()> task);
+    ThreadId spawn(std::function<void(ThreadContext&)> task);
     void run(const std::vector<ThreadId>& schedule);
 
 private:
@@ -23,7 +38,7 @@ private:
         finished
     };
 
-    std::vector<std::function<void()>> tasks_;
+    std::vector<std::function<void(ThreadContext&)>> tasks_;
     std::vector<WorkerState> states_;
 
     std::mutex mutex_;
