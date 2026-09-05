@@ -22,6 +22,12 @@ target_link_libraries(runtime_test PRIVATE
     arbiter0
 )
 
+find_package(Threads REQUIRED)
+
+target_link_libraries(arbiter0 PRIVATE
+    Threads::Threads
+)
+
 enable_testing()
 
 add_test(

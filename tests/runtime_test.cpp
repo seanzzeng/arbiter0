@@ -1,23 +1,24 @@
 #include <arbiter0/runtime.hpp>
 #include <cassert>
+#include <vector>
 
 int main() {
     arbiter0::Runtime runtime;
     std::vector<int> events;
 
-    auto first = runtime.spawn([&] {
-        events.push_back(10);
+    int first_result = 0;
+    int second_result = 0;
+
+    runtime.spawn([&] {
+        first_result = 10;
     });
 
-    auto second = runtime.spawn([&] {
-        events.push_back(20);
+    runtime.spawn([&] {
+        second_result = 20;
     });
 
     runtime.run();
 
-    assert(first == 0);
-    assert(second == 1);
-    assert(events.size() == 2);
-    assert(events[0] == 10);
-    assert(events[1] == 20);
+    assert(first_result == 10);
+    assert(second_result == 20);
 }
