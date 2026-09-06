@@ -40,8 +40,12 @@ void Runtime::run(const std::vector<ThreadId>& schedule) {
                     cv_.notify_all();
 
                     cv_.wait(lock, [this, id] {
-                        return states_[id] == WorkerState::running;
+                        return stopping_ || states_[id] == WorkerState::running;
                     });
+
+                    if (stopping_) {
+                        throw RunCancelled{};
+                    }
                 }
 
                 // *this is runtime obj itself

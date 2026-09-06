@@ -32,6 +32,39 @@ int main() {
 
     assert(rejected);
 
+    rejected = false;
+
+    // not finished
+    try {
+        runtime.run({0, 1});
+    } catch (const std::invalid_argument&) {
+        rejected = true;
+    }
+
+    assert(rejected);
+
+    rejected = false;
+
+    // cancelling partial + full task
+    try {
+        runtime.run({0});
+    } catch (const std::invalid_argument&) {
+        rejected = true;
+    }
+
+    assert(rejected);
+
+    rejected = false;
+
+    // reject finished worker
+    try {
+        runtime.run({0, 0, 0});
+    } catch (const std::invalid_argument&) {
+        rejected = true;
+    }
+
+    assert(rejected);
+
     events.clear();
     runtime.run({0, 0, 1, 1});
     assert((events == std::vector<int>{10, 11, 20, 21}));
