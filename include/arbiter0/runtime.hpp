@@ -5,6 +5,7 @@
 #include <vector>
 #include <mutex>
 #include <condition_variable>
+#include <exception>
 
 namespace arbiter0 {
 
@@ -52,6 +53,9 @@ private:
 
     std::size_t ready_cnt_ = 0;
     bool stopping_ = false;
+
+    // exceptions unwind the thread they were thrown on, pass back to caller safely
+    std::exception_ptr worker_err_;
 
 };
 

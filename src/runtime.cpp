@@ -25,6 +25,7 @@ void Runtime::run(const std::vector<ThreadId>& schedule) {
 
     ready_cnt_ = 0;
     stopping_ = false;
+    worker_err_ = nullptr;
 
     std::vector<std::thread> run_threads; 
     run_threads.reserve(tasks_.size());
@@ -52,7 +53,13 @@ void Runtime::run(const std::vector<ThreadId>& schedule) {
                 ThreadContext context(*this, id);
                 tasks_[id](context);
             } catch (const RunCancelled&) {
-                // cleanup
+                // cleanup (expected cancellation)
+            } catch (...) {
+                std::lock_guard lock(mutex_);
+
+                if (!worker_err_) {
+                    worker_err_ = std::current_exception();
+                }
             }
 
             {
@@ -87,9 +94,13 @@ void Runtime::run(const std::vector<ThreadId>& schedule) {
             cv_.wait(lock, [this, id] {
                 return states_[id] != WorkerState::running;
             });
+
+            if (worker_err_) {
+                break;
+            }
         }
 
-        if (schedule_err == nullptr) {
+        if (schedule_err == nullptr && !worker_err_) {
             for (WorkerState state: states_) {
                 if (state != WorkerState::finished) {
                     schedule_err = "schedule ended before all workers finished";
@@ -98,7 +109,7 @@ void Runtime::run(const std::vector<ThreadId>& schedule) {
             }
         }
 
-        if (schedule_err != nullptr) {
+        if (schedule_err != nullptr || worker_err_) {
             stopping_ = true;
             cv_.notify_all();
         }
@@ -107,6 +118,10 @@ void Runtime::run(const std::vector<ThreadId>& schedule) {
     // cleanup
     for (auto& worker: run_threads) {
         worker.join();
+    }
+
+    if (worker_err_) {
+        std::rethrow_exception(worker_err_);
     }
 
     if (schedule_err != nullptr) {

@@ -2,6 +2,7 @@
 #include <cassert>
 #include <vector>
 #include <stdexcept>
+#include <string>
 
 int main() {
     arbiter0::Runtime runtime;
@@ -68,4 +69,29 @@ int main() {
     events.clear();
     runtime.run({0, 0, 1, 1});
     assert((events == std::vector<int>{10, 11, 20, 21}));
+
+    // test exception is thrown on the thread calling run()
+    {
+        arbiter0::Runtime failing_runtime;
+        bool second_ran = false;
+        bool caught = false;
+
+        failing_runtime.spawn([](arbiter0::ThreadContext&) {
+            throw std::runtime_error("a runtime error has occurred");
+        });
+
+        failing_runtime.spawn([&](arbiter0::ThreadContext&) {
+            second_ran = true;
+        });
+
+        try {
+            failing_runtime.run({0, 1});
+        } catch (const std::runtime_error& err) {
+            caught = true;
+            assert(std::string(err.what()) == "a runtime error has occurred");
+        }
+
+        assert(caught);
+        assert(!second_ran);
+    }
 }
