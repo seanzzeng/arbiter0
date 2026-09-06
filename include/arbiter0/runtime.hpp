@@ -31,6 +31,9 @@ public:
     void run(const std::vector<ThreadId>& schedule);
 
 private:
+    friend class ThreadContext;
+    void yield(ThreadId id);
+
     enum class WorkerState {
         created,
         runnable,

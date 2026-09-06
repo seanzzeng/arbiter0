@@ -91,4 +91,23 @@ void Runtime::run(const std::vector<ThreadId>& schedule) {
     }
 }
 
+void ThreadContext::yield() {
+    runtime_.yield(id_);
+}
+
+void Runtime::yield(ThreadId id) {
+    {
+        std::unique_lock lock(mutex_);
+        assert(states_[id] == WorkerState::running);
+
+        states_[id] = WorkerState::runnable;
+
+        cv_.notify_all();
+        
+        cv_.wait(lock, [this, id] {
+            return states_[id] == WorkerState::running;
+        });
+    }
+}
+
 }
