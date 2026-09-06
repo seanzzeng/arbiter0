@@ -13,6 +13,10 @@ ThreadId Runtime::spawn(std::function<void(ThreadContext&)> task) {
     return id; // sequential id
 }
 
+const std::vector<TraceStep>& Runtime::trace() const {
+    return trace_;
+}
+
 void Runtime::run(const std::vector<ThreadId>& schedule) {
     for (ThreadId id: schedule) {
         if (id >= tasks_.size()) {
@@ -21,6 +25,9 @@ void Runtime::run(const std::vector<ThreadId>& schedule) {
             };
         }
     }
+
+    trace_.clear();
+    trace_.reserve(schedule.size());
     states_.assign(tasks_.size(), WorkerState::created);
 
     ready_cnt_ = 0;
@@ -111,6 +118,15 @@ void Runtime::run(const std::vector<ThreadId>& schedule) {
             cv_.wait(lock, [this, id] {
                 return states_[id] != WorkerState::running;
             });
+
+            if (worker_err_) {
+                trace_.emplace_back(id, StepOutcome::failed);
+            } else if (states_[id] == WorkerState::runnable) {
+                trace_.emplace_back(id, StepOutcome::yielded);
+            } else {
+                assert(states_[id] == WorkerState::finished);
+                trace_.emplace_back(id, StepOutcome::finished);
+            }
 
             if (worker_err_) {
                 break;

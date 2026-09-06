@@ -21,6 +21,16 @@ int main() {
     });
 
     runtime.run({0, 1, 0, 1});
+    auto& runtime_trace = runtime.trace();
+    assert(runtime_trace.size() == 4);
+    assert(runtime_trace[0].thread == 0);
+    assert(runtime_trace[0].outcome == arbiter0::StepOutcome::yielded);
+    assert(runtime_trace[1].thread == 1);
+    assert(runtime_trace[1].outcome == arbiter0::StepOutcome::yielded);
+    assert(runtime_trace[2].thread == 0);
+    assert(runtime_trace[2].outcome == arbiter0::StepOutcome::finished);
+    assert(runtime_trace[3].thread == 1);
+    assert(runtime_trace[3].outcome == arbiter0::StepOutcome::finished);
 
     assert((events == std::vector<int>{10, 20, 11, 21}));
     
@@ -30,7 +40,6 @@ int main() {
     } catch (const std::invalid_argument&) {
         rejected = true;
     }
-
     assert(rejected);
 
     rejected = false;

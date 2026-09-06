@@ -11,6 +11,17 @@ namespace arbiter0 {
 
 using ThreadId = std::size_t;
 
+enum class StepOutcome {
+    yielded,
+    finished,
+    failed
+};
+
+struct TraceStep {
+    ThreadId thread;
+    StepOutcome outcome;
+};
+
 class Runtime;
 
 class ThreadContext {
@@ -30,10 +41,13 @@ class Runtime {
 public:
     ThreadId spawn(std::function<void(ThreadContext&)> task);
     void run(const std::vector<ThreadId>& schedule);
+    const std::vector<TraceStep>& trace() const;
 
 private:
     // cancellation signal
     struct RunCancelled {};
+
+    std::vector<TraceStep> trace_;
 
     friend class ThreadContext;
     void yield(ThreadId id);
