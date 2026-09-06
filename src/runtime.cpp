@@ -14,48 +14,42 @@ ThreadId Runtime::spawn(std::function<void(ThreadContext&)> task) {
 }
 
 void Runtime::run(const std::vector<ThreadId>& schedule) {
-    if (schedule.size() != tasks_.size()) {
-        throw std::invalid_argument(
-            "schedule must contain every worker exactly once"
-        );
-    }
-
-    std::vector<bool> seen(tasks_.size(), false);
     for (ThreadId id: schedule) {
         if (id >= tasks_.size()) {
-            throw std::invalid_argument(
-                "schedule contains invalid worker ID"
-            );
+            throw std::invalid_argument {
+                "schedule contains invalid ID"
+            };
         }
-        if (seen[id]) {
-            throw std::invalid_argument(
-                "schedule contains duplicate worker ID"
-            );
-        }
-        seen[id] = true;
     }
     states_.assign(tasks_.size(), WorkerState::created);
+
     ready_cnt_ = 0;
+    stopping_ = false;
+
     std::vector<std::thread> run_threads; 
     run_threads.reserve(tasks_.size());
     for (ThreadId id = 0; id < tasks_.size(); ++id) {
         run_threads.emplace_back([this, id] {
-            {
-                std::unique_lock lock(mutex_);
+            try {
+                {
+                    std::unique_lock lock(mutex_);
 
-                states_[id] = WorkerState::runnable;
+                    states_[id] = WorkerState::runnable;
 
-                ++ready_cnt_;
-                cv_.notify_all();
+                    ++ready_cnt_;
+                    cv_.notify_all();
 
-                cv_.wait(lock, [this, id] {
-                    return states_[id] == WorkerState::running;
-                });
+                    cv_.wait(lock, [this, id] {
+                        return states_[id] == WorkerState::running;
+                    });
+                }
+
+                // *this is runtime obj itself
+                ThreadContext context(*this, id);
+                tasks_[id](context);
+            } catch (const RunCancelled&) {
+                // cleanup
             }
-
-            // *this is runtime obj itself
-            ThreadContext context(*this, id);
-            tasks_[id](context);
 
             {
                 std::lock_guard lock(mutex_);
@@ -63,8 +57,11 @@ void Runtime::run(const std::vector<ThreadId>& schedule) {
             }
 
             cv_.notify_all();
+        
         });
     }
+
+    const char* schedule_err = nullptr;
 
     {
         std::unique_lock lock(mutex_);
@@ -74,20 +71,42 @@ void Runtime::run(const std::vector<ThreadId>& schedule) {
         });
 
         for (auto& id: schedule) {
-            assert(states_[id] == WorkerState::runnable);
+            if (states_[id] != WorkerState::runnable) {
+                schedule_err = "schedule selects finished worker";
+                break;
+            }
 
             states_[id] = WorkerState::running;
             cv_.notify_all();
 
+            // either yielded or finished
             cv_.wait(lock, [this, id] {
-                return states_[id] == WorkerState::finished;
+                return states_[id] != WorkerState::running;
             });
+        }
+
+        if (schedule_err == nullptr) {
+            for (WorkerState state: states_) {
+                if (state != WorkerState::finished) {
+                    schedule_err = "schedule ended before all workers finished";
+                    break;
+                }
+            }
+        }
+
+        if (schedule_err != nullptr) {
+            stopping_ = true;
+            cv_.notify_all();
         }
     }
 
     // cleanup
     for (auto& worker: run_threads) {
         worker.join();
+    }
+
+    if (schedule_err != nullptr) {
+        throw std::invalid_argument(schedule_err);
     }
 }
 
@@ -105,8 +124,12 @@ void Runtime::yield(ThreadId id) {
         cv_.notify_all();
         
         cv_.wait(lock, [this, id] {
-            return states_[id] == WorkerState::running;
+            return stopping_ || states_[id] == WorkerState::running;
         });
+
+        if (stopping_) {
+            throw RunCancelled{};
+        }
     }
 }
 

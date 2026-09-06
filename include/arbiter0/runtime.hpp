@@ -31,6 +31,9 @@ public:
     void run(const std::vector<ThreadId>& schedule);
 
 private:
+    // cancellation signal
+    struct RunCancelled {};
+
     friend class ThreadContext;
     void yield(ThreadId id);
 
@@ -48,6 +51,7 @@ private:
     std::condition_variable cv_;
 
     std::size_t ready_cnt_ = 0;
+    bool stopping_ = false;
 
 };
 
