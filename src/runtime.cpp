@@ -29,48 +29,65 @@ void Runtime::run(const std::vector<ThreadId>& schedule) {
 
     std::vector<std::thread> run_threads; 
     run_threads.reserve(tasks_.size());
-    for (ThreadId id = 0; id < tasks_.size(); ++id) {
-        run_threads.emplace_back([this, id] {
-            try {
-                {
-                    std::unique_lock lock(mutex_);
 
-                    states_[id] = WorkerState::runnable;
+    try {
+        for (ThreadId id = 0; id < tasks_.size(); ++id) {
+            run_threads.emplace_back([this, id] {
+                try {
+                    {
+                        std::unique_lock lock(mutex_);
 
-                    ++ready_cnt_;
-                    cv_.notify_all();
+                        states_[id] = WorkerState::runnable;
 
-                    cv_.wait(lock, [this, id] {
-                        return stopping_ || states_[id] == WorkerState::running;
-                    });
+                        ++ready_cnt_;
+                        cv_.notify_all();
 
-                    if (stopping_) {
-                        throw RunCancelled{};
+                        cv_.wait(lock, [this, id] {
+                            return stopping_ || states_[id] == WorkerState::running;
+                        });
+
+                        if (stopping_) {
+                            throw RunCancelled{};
+                        }
+                    }
+
+                    // *this is runtime obj itself
+                    ThreadContext context(*this, id);
+                    tasks_[id](context);
+                } catch (const RunCancelled&) {
+                    // cleanup (expected cancellation)
+                } catch (...) {
+                    std::lock_guard lock(mutex_);
+
+                    if (!worker_err_) {
+                        worker_err_ = std::current_exception();
                     }
                 }
 
-                // *this is runtime obj itself
-                ThreadContext context(*this, id);
-                tasks_[id](context);
-            } catch (const RunCancelled&) {
-                // cleanup (expected cancellation)
-            } catch (...) {
-                std::lock_guard lock(mutex_);
-
-                if (!worker_err_) {
-                    worker_err_ = std::current_exception();
+                {
+                    std::lock_guard lock(mutex_);
+                    states_[id] = WorkerState::finished;
                 }
-            }
 
-            {
-                std::lock_guard lock(mutex_);
-                states_[id] = WorkerState::finished;
-            }
+                cv_.notify_all();
+            
+            });
+        }
+    } catch (...) {
+        // startup failure
+        {
+            std::lock_guard lock(mutex_);
+            stopping_ = true;
+        }
 
-            cv_.notify_all();
-        
-        });
-    }
+        cv_.notify_all();
+
+        for (auto &worker: run_threads) {
+            worker.join();
+        }
+
+        throw;
+    }    
 
     const char* schedule_err = nullptr;
 
