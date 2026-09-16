@@ -18,6 +18,8 @@ const std::vector<TraceStep>& Runtime::trace() const {
 }
 
 void Runtime::run(const std::vector<ThreadId>& schedule) {
+    trace_.clear();
+
     for (ThreadId id: schedule) {
         if (id >= tasks_.size()) {
             throw std::invalid_argument {
@@ -26,7 +28,6 @@ void Runtime::run(const std::vector<ThreadId>& schedule) {
         }
     }
 
-    trace_.clear();
     trace_.reserve(schedule.size());
     states_.assign(tasks_.size(), WorkerState::created);
 

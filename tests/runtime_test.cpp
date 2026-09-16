@@ -4,6 +4,26 @@
 #include <stdexcept>
 #include <string>
 
+int run_increment_test(const std::vector<arbiter0::ThreadId>& schedule) {
+    arbiter0::Runtime runtime;
+    int counter = 0;
+    runtime.spawn([&counter](arbiter0::ThreadContext& ctx) {
+        int local_counter = counter;
+        ++local_counter;
+        ctx.yield();
+        counter = local_counter;
+    });
+    runtime.spawn([&counter](arbiter0::ThreadContext& ctx) {
+        int local_counter = counter;
+        ++local_counter;
+        ctx.yield();
+        counter = local_counter;
+    });
+
+    runtime.run(schedule);
+    return counter;
+}
+
 int main() {
     arbiter0::Runtime runtime;
     std::vector<int> events;
@@ -103,4 +123,8 @@ int main() {
         assert(caught);
         assert(!second_ran);
     }
+
+    // data race simulation
+    assert(run_increment_test({0, 0, 1, 1}) == 2);
+    assert(run_increment_test({0, 1, 0, 1}) == 1);
 }
