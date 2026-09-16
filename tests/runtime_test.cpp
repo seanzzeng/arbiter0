@@ -1,22 +1,10 @@
 #include <arbiter0/runtime.hpp>
+#include <arbiter0/explorer.hpp>
 #include <cassert>
 #include <vector>
 #include <stdexcept>
 #include <string>
 #include <algorithm>
-
-std::vector<std::vector<arbiter0::ThreadId>> find_failing_increment_schedules() {
-    std::vector<std::vector<arbiter0::ThreadId>> all_failing_schedules;
-    std::vector<arbiter0::ThreadId> schedule = {0, 0, 1, 1};
-
-    do {
-        if (run_increment_test(schedule) != 2) {
-            all_failing_schedules.push_back(schedule);
-        }
-    } while (std::next_permutation(schedule.begin(), schedule.end()));
-
-    return all_failing_schedules;
-}
 
 int run_increment_test(const std::vector<arbiter0::ThreadId>& schedule) {
     arbiter0::Runtime runtime;
@@ -36,6 +24,19 @@ int run_increment_test(const std::vector<arbiter0::ThreadId>& schedule) {
 
     runtime.run(schedule);
     return counter;
+}
+
+std::vector<std::vector<arbiter0::ThreadId>> find_failing_increment_schedules() {
+    std::vector<std::vector<arbiter0::ThreadId>> all_failing_schedules;
+    std::vector<arbiter0::ThreadId> schedule = {0, 0, 1, 1};
+
+    do {
+        if (run_increment_test(schedule) != 2) {
+            all_failing_schedules.push_back(schedule);
+        }
+    } while (std::next_permutation(schedule.begin(), schedule.end()));
+
+    return all_failing_schedules;
 }
 
 int main() {
@@ -146,4 +147,35 @@ int main() {
     for (const auto &schedule: failures) {
         assert(run_increment_test(schedule) != 2);
     }
+
+    {
+        auto execution_increment = [](const std::vector<arbiter0::ThreadId>& prefix) {
+            arbiter0::Runtime runtime;
+            int counter = 0;
+
+            auto increment = [&counter](arbiter0::ThreadContext& ctx) {
+                int value = counter;
+                ctx.yield();
+                counter = value + 1;
+            };
+
+            runtime.spawn(increment);
+            runtime.spawn(increment);
+
+            auto result = runtime.run_prefix(prefix);
+
+            if (result.status == arbiter0::ExecutionStatus::completed && counter != 2) {
+                result.status = arbiter0::ExecutionStatus::failed;
+                result.error = std::make_exception_ptr(std::runtime_error("lost update"));
+            }
+
+            return result;
+        };
+
+        auto result = arbiter0::explore(execution_increment, 4);
+
+        assert(result.failures.size() == 4);
+        assert(result.completed == 2);
+        assert(result.bounded == 0);
+    }    
 }

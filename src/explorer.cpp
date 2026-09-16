@@ -47,6 +47,8 @@ ExplorationResult explore(
             pending.push_back(std::move(child));
         }
     }
+
+    return result;
 }
 
 }
