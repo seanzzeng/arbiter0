@@ -17,7 +17,7 @@ const std::vector<TraceStep>& Runtime::trace() const {
     return trace_;
 }
 
-void Runtime::run(const std::vector<ThreadId>& schedule) {
+ExecutionResult Runtime::run_prefix(const std::vector<ThreadId>& schedule) {
     trace_.clear();
 
     for (ThreadId id: schedule) {
@@ -37,6 +37,14 @@ void Runtime::run(const std::vector<ThreadId>& schedule) {
 
     std::vector<std::thread> run_threads; 
     run_threads.reserve(tasks_.size());
+
+    ExecutionResult result{
+        ExecutionStatus::completed,
+        {},
+        nullptr
+    };
+
+    result.runnable.reserve(tasks_.size());
 
     try {
         for (ThreadId id = 0; id < tasks_.size(); ++id) {
@@ -134,19 +142,25 @@ void Runtime::run(const std::vector<ThreadId>& schedule) {
             }
         }
 
-        if (schedule_err == nullptr && !worker_err_) {
-            for (WorkerState state: states_) {
-                if (state != WorkerState::finished) {
-                    schedule_err = "schedule ended before all workers finished";
-                    break;
+        // get snapshot
+        if (schedule_err == nullptr) {
+            if (worker_err_) {
+                result.status = ExecutionStatus::failed;
+                result.error = worker_err_;
+            } else {
+                for (ThreadId id = 0; id < states_.size(); ++id) {
+                    if (states_[id] == WorkerState::runnable) {
+                        result.runnable.push_back(id);
+                    } else {
+                        assert(states_[id] == WorkerState::finished);
+                    }
                 }
+
+                result.status = result.runnable.empty() ? ExecutionStatus::completed : ExecutionStatus::needs_choice;
             }
         }
-
-        if (schedule_err != nullptr || worker_err_) {
-            stopping_ = true;
-            cv_.notify_all();
-        }
+        stopping_ = true;
+        cv_.notify_all();
     }
 
     // cleanup
@@ -154,13 +168,24 @@ void Runtime::run(const std::vector<ThreadId>& schedule) {
         worker.join();
     }
 
-    if (worker_err_) {
-        std::rethrow_exception(worker_err_);
-    }
-
     if (schedule_err != nullptr) {
         throw std::invalid_argument(schedule_err);
     }
+
+    return result;
+}
+
+void Runtime::run(const std::vector<ThreadId>& schedule) {
+    ExecutionResult result = run_prefix(schedule);
+
+    if (result.status == ExecutionStatus::failed) {
+        std::rethrow_exception(result.error);
+    }
+
+    if (result.status == ExecutionStatus::needs_choice) {
+        throw std::invalid_argument("schedule ended before all workers finished");
+    }
+
 }
 
 void ThreadContext::yield() {
@@ -185,5 +210,4 @@ void Runtime::yield(ThreadId id) {
         }
     }
 }
-
 }

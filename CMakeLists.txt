@@ -4,6 +4,7 @@ project(arbiter0 VERSION 0.1.0 LANGUAGES CXX)
 
 add_library(arbiter0
     src/runtime.cpp
+    src/explorer.cpp
 )
 
 target_include_directories(arbiter0 PUBLIC
