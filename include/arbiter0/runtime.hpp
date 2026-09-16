@@ -17,9 +17,21 @@ enum class StepOutcome {
     failed
 };
 
+enum class ExecutionStatus {
+    needs_choice,
+    completed,
+    failed
+};
+
 struct TraceStep {
     ThreadId thread;
     StepOutcome outcome;
+};
+
+struct ExecutionResult {
+    ExecutionStatus status;
+    std::vector<ThreadId> runnable;
+    std::exception_ptr error;
 };
 
 class Runtime;
@@ -42,6 +54,7 @@ public:
     ThreadId spawn(std::function<void(ThreadContext&)> task);
     void run(const std::vector<ThreadId>& schedule);
     const std::vector<TraceStep>& trace() const;
+    ExecutionResult run_prefix(const std::vector<ThreadId>& prefix);
 
 private:
     // cancellation signal

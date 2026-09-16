@@ -3,6 +3,20 @@
 #include <vector>
 #include <stdexcept>
 #include <string>
+#include <algorithm>
+
+std::vector<std::vector<arbiter0::ThreadId>> find_failing_increment_schedules() {
+    std::vector<std::vector<arbiter0::ThreadId>> all_failing_schedules;
+    std::vector<arbiter0::ThreadId> schedule = {0, 0, 1, 1};
+
+    do {
+        if (run_increment_test(schedule) != 2) {
+            all_failing_schedules.push_back(schedule);
+        }
+    } while (std::next_permutation(schedule.begin(), schedule.end()));
+
+    return all_failing_schedules;
+}
 
 int run_increment_test(const std::vector<arbiter0::ThreadId>& schedule) {
     arbiter0::Runtime runtime;
@@ -125,6 +139,11 @@ int main() {
     }
 
     // data race simulation
-    assert(run_increment_test({0, 0, 1, 1}) == 2);
-    assert(run_increment_test({0, 1, 0, 1}) == 1);
+    auto failures = find_failing_increment_schedules();
+
+    assert(failures.size() == 4);
+
+    for (const auto &schedule: failures) {
+        assert(run_increment_test(schedule) != 2);
+    }
 }
